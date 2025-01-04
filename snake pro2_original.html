@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Game</title>
+    <style>
+        #game-container {
+            text-align: center;
+        }
+        .keys {
+            margin-top: 30px;
+        }
+        #timer {
+            margin-top: 30px;
+            font-size: 18px;
+        }
+        #pause-message {
+            display: none;
+            font-size: 24px;
+            color: #59ff00;
+        }
+        #score-board {
+            margin-top: 40px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gc" width="400" height="400"></canvas>
+    </div>
+    <div class="keys">
+        <a class="up arr" onclick="Snake.action('up')">↑</a><br />
+        <a class="left arr" onclick="Snake.action('left')">←</a>
+        <a class="down arr" onclick="Snake.action('down')">↓</a>
+        <a class="right arr" onclick="Snake.action('right')">→</a>
+    </div>
+    <div id="timer">
+        <span>Time: </span><span id="time-display">0:00</span>
+    </div>
+    <div id="score-board">
+        <span>Current Score: </span><span id="score-display">0</span>
+    </div>
+    <div id="high-score-board">
+        <span>High Score: </span><span id="high-score-display">0</span>
+    </div>
+    <div id="pause-message">Game Paused. Press SPACE to resume.</div>
+
+    <script>
+        let timerInterval;
+        let elapsedTime = 0;
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                elapsedTime++;
+                updateTimeDisplay();
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+        }
+
+        function resetTimer() {
+            stopTimer();
+            elapsedTime = 0;
+            updateTimeDisplay();
+        }
+
+        function updateTimeDisplay() {
+            const minutes = Math.floor(elapsedTime / 60);
+            const seconds = elapsedTime % 60;
+            document.getElementById('time-display').textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+        }
+
+        var Snake = (function () {
+            const INITIAL_TAIL = 4;
+            var fixedTail = true;
+            var intervalID;
+            var tileCount = 60;
+            var gridSize = 400 / tileCount;
+
+            const INITIAL_PLAYER = { x: Math.floor(tileCount / 2), y: Math.floor(tileCount / 2) };
+            var velocity = { x: 0, y: 0 };
+            var player = { ...INITIAL_PLAYER };
+            var fruit = { x: Math.floor(Math.random() * tileCount), y: Math.floor(Math.random() * tileCount) };
+            var trail = [];
+            var tail = INITIAL_TAIL;
+            var points = 0;
+            var highScore = parseInt(localStorage.getItem('snakeGameHighScore')) || 0; // 로컬 스토리지에서 하이 스코어 가져오기
+            var isPaused = false;
+
+            function setup() {
+                const canv = document.getElementById('gc');
+                const ctx = canv.getContext('2d');
+                game.reset();
+                updateHighScoreDisplay(); // 하이 스코어 초기화
+            }
+
+            var game = {
+                reset: function () {
+                    const ctx = document.getElementById('gc').getContext('2d');
+                    ctx.fillStyle = 'grey';
+                    ctx.fillRect(0, 0, 400, 400);
+                    tail = INITIAL_TAIL;
+                    points = 0; // 현재 점수는 리셋
+                    velocity.x = 0;
+                    velocity.y = 0;
+                    player.x = INITIAL_PLAYER.x;
+                    player.y = INITIAL_PLAYER.y;
+                    trail = [];
+                    resetTimer(); // Reset timer on game reset
+                    startTimer(); // Start timer
+                    this.spawnFruit(); // Spawn fruit
+                    this.updateScoreDisplay(); // Update score display
+                },
+                spawnFruit: function() {
+                    let newFruit;
+                    do {
+                        newFruit = { x: Math.floor(Math.random() * tileCount), y: Math.floor(Math.random() * tileCount) };
+                    } while (trail.some(segment => segment.x === newFruit.x && segment.y === newFruit.y));
+                    fruit = newFruit;
+                },
+                action: {
+                    up: function () { if (velocity.y === 0) { velocity.x = 0; velocity.y = -1; } },
+                    down: function () { if (velocity.y === 0) { velocity.x = 0; velocity.y = 1; } },
+                    left: function () { if (velocity.x === 0) { velocity.x = -1; velocity.y = 0; } },
+                    right: function () { if (velocity.x === 0) { velocity.x = 1; velocity.y = 0; } }
+                },
+                loop: function () {
+                    if (!isPaused) {
+                        if (velocity.x || velocity.y) {
+                            trail.push({ x: player.x, y: player.y });
+                            while (trail.length > tail) trail.shift();
+
+                            player.x += velocity.x;
+                            player.y += velocity.y;
+
+                            // Wrap around logic
+                            if (player.x < 0) player.x = tileCount - 1;
+                            if (player.x >= tileCount) player.x = 0;
+                            if (player.y < 0) player.y = tileCount - 1;
+                            if (player.y >= tileCount) player.y = 0;
+
+                            // Check for collision with the tail
+                            for (let i = 0; i < trail.length - 1; i++) {
+                                if (trail[i].x === player.x && trail[i].y === player.y) {
+                                    this.checkHighScore(); // 하이 스코어 확인
+                                    game.reset();
+                                }
+                            }
+                        }
+
+                        const ctx = document.getElementById('gc').getContext('2d');
+                        ctx.fillStyle = 'rgba(40, 40, 40, 0.8)';
+                        ctx.fillRect(0, 0, 400, 400);
+
+                        ctx.fillStyle = 'green';
+                        for (let segment of trail) {
+                            ctx.fillRect(segment.x * gridSize + 1, segment.y * gridSize + 1, gridSize - 2, gridSize - 2);
+                        }
+
+                        ctx.fillStyle = 'yellow';
+                        ctx.fillRect(fruit.x * gridSize + 1, fruit.y * gridSize + 1, gridSize - 2, gridSize - 2);
+
+                        ctx.fillStyle = 'white';
+                        ctx.font = "bold small-caps 12px Helvetica";
+                        ctx.fillText("Current Score: " + points, 288, 20);
+                        ctx.fillText("High Score: " + highScore, 288, 60);
+
+                        // Check if the snake eats the fruit
+                        if (player.x === fruit.x && player.y === fruit.y) {
+                            tail++;
+                            points++;
+                            this.spawnFruit(); // Spawn new fruit
+                            this.updateScoreDisplay(); // Update score display
+                        }
+                    } else {
+                        document.getElementById('pause-message').style.display = 'block';
+                    }
+                },
+                updateScoreDisplay: function() {
+                    document.getElementById('score-display').textContent = points;
+                },
+                checkHighScore: function() {
+                    if (points > highScore) {
+                        highScore = points;
+                        localStorage.setItem('snakeGameHighScore', highScore); // 새로운 하이 스코어 저장
+                        updateHighScoreDisplay();
+                    }
+                }
+            };
+
+            function updateHighScoreDisplay() {
+                document.getElementById('high-score-display').textContent = highScore; // 하이 스코어 업데이트
+            }
+
+            return {
+                start: function (fps = 15) {
+                    window.onload = setup;
+                    intervalID = setInterval(game.loop.bind(game), 1000 / fps);
+                },
+                action: function (act) {
+                    game.action[act]();
+                },
+                pause: function() {
+                    isPaused = !isPaused;
+                },
+                reset: function() {
+                    game.reset();
+                }
+            };
+        })();
+
+        // 키보드 입력 리스너
+        document.addEventListener('keydown', function (evt) {
+            switch (evt.keyCode) {
+                case 37: // left
+                    Snake.action('left');
+                    evt.preventDefault();
+                    break;
+                case 38: // up
+                    Snake.action('up');
+                    evt.preventDefault();
+                    break;
+                case 39: // right
+                    Snake.action('right');
+                    evt.preventDefault();
+                    break;
+                case 40: // down
+                    Snake.action('down');
+                    evt.preventDefault();
+                    break;
+                case 32: // space
+                    Snake.pause();
+                    evt.preventDefault();
+                    break;
+                case 27: // esc
+                    Snake.reset();
+                    evt.preventDefault();
+                    break;
+            }
+        });
+
+        Snake.start(10); // FPS 설정
+    </script>
+</body>
+</html>
